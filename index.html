@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="深坑國小 3D 互動校園導覽：切換樓層、搜尋教室、對照 Google 地圖。">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}body{margin:0;font:14px system-ui,sans-serif}[hidden]{display:none!important}</style>
+<title>深坑國小 3D 校園</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: full-bleed 3D scene. Navy header toolbar on top, campus-guide sidebar left,
+   floor rail right, controls hint bottom-center, detail card top-right. */
+:root{
+  --bg:#e4ecef; --sky:#dce7ec;
+  --head:#1d2b3a; --head-ink:#ffffff; --head-muted:#a9bccb; --head-btn:rgba(255,255,255,.08);
+  --panel:rgba(255,255,255,.94); --panel-solid:#ffffff;
+  --ink:#1c2632; --muted:#5d6b78; --line:rgba(28,38,50,.12);
+  --accent:#f2b705; --accent-ink:#1c2632; --chip:#eef2f4; --hover:#e6edf1;
+  --shadow:0 6px 24px rgba(20,35,50,.16);
+  --font-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f161d; --sky:#16212c; --head:#0d151d; --head-btn:rgba(255,255,255,.07);
+  --panel:rgba(22,31,41,.94); --panel-solid:#16202a;
+  --ink:#e8eef3; --muted:#9aa9b6; --line:rgba(232,238,243,.13); --accent:#f5c542; --accent-ink:#141b22; --chip:#22303d; --hover:#263646;
+  --shadow:0 6px 24px rgba(0,0,0,.45); color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#0f161d; --sky:#16212c; --head:#0d151d; --head-btn:rgba(255,255,255,.07);
+  --panel:rgba(22,31,41,.94); --panel-solid:#16202a;
+  --ink:#e8eef3; --muted:#9aa9b6; --line:rgba(232,238,243,.13); --accent:#f5c542; --accent-ink:#141b22; --chip:#22303d; --hover:#263646;
+  --shadow:0 6px 24px rgba(0,0,0,.45); color-scheme:dark }
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);overflow:hidden}
+#stage{position:fixed;inset:0}
+#stage canvas{display:block;touch-action:none}
+#labels{position:absolute;inset:0;pointer-events:none}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+
+/* header */
+.head{position:fixed;left:12px;right:12px;top:calc(10px + env(safe-area-inset-top,0px));height:64px;display:flex;align-items:center;gap:12px;padding:0 12px 0 14px;background:var(--head);color:var(--head-ink);border-radius:16px;box-shadow:var(--shadow);z-index:20}
+.seal{width:40px;height:40px;border-radius:11px;background:var(--accent);color:#1c2632;display:grid;place-items:center;font-weight:900;font-size:19px;flex:0 0 auto}
+.ttl{min-width:0}
+.ttl h1{margin:0;font-size:18px;font-weight:900;letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ttl p{margin:1px 0 0;font-size:11.5px;color:var(--head-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.02em}
+.hbtns{margin-left:auto;display:flex;gap:6px}
+.hb{height:42px;min-width:42px;padding:0 10px;display:flex;align-items:center;justify-content:center;gap:6px;border-radius:11px;border:1px solid rgba(255,255,255,.14);background:var(--head-btn);color:var(--head-ink);cursor:pointer;font-size:13px;font-weight:700;text-decoration:none;white-space:nowrap}
+.hb:hover{background:rgba(255,255,255,.16)}
+.hb[aria-pressed="true"]{background:var(--accent);color:#1c2632;border-color:transparent}
+.hb.map{background:#2f7fd1;border-color:transparent}
+.hb.map:hover{background:#3a8ce0}
+.hb .t{display:inline}
+.menu{display:none}
+
+/* sidebar */
+.side{position:fixed;left:12px;top:calc(86px + env(safe-area-inset-top,0px));bottom:calc(70px + env(safe-area-inset-bottom,0px));width:276px;display:flex;flex-direction:column;background:var(--panel);backdrop-filter:blur(10px);border-radius:16px;box-shadow:var(--shadow);z-index:15;overflow:hidden;border:1px solid var(--line)}
+.side.collapsed{bottom:auto}
+.side-h{display:flex;align-items:center;gap:8px;padding:12px 12px 10px 16px;font-weight:900;font-size:15px}
+.side-h .x{margin-left:auto;width:30px;height:30px;border-radius:8px;border:0;background:var(--chip);cursor:pointer;display:grid;place-items:center}
+.side.collapsed .side-b{display:none}
+.side-b{display:flex;flex-direction:column;min-height:0;flex:1}
+.search{position:relative;margin:0 12px 8px}
+.search input{width:100%;box-sizing:border-box;height:42px;border-radius:11px;border:1px solid var(--line);background:var(--panel-solid);color:var(--ink);font-size:14px;padding:0 10px 0 36px}
+.search input::placeholder{color:var(--muted)}
+.search svg{position:absolute;left:11px;top:11px;width:18px;height:18px;color:var(--muted);pointer-events:none}
+.list{overflow-y:auto;padding:0 8px 12px;flex:1;min-height:0}
+.sec{font-size:11px;letter-spacing:.14em;color:var(--muted);font-weight:700;margin:12px 8px 4px}
+.item{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;text-align:left;padding:9px 8px;border-radius:10px;cursor:pointer}
+.item:hover,.item[aria-selected="true"]{background:var(--hover)}
+.item .ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex:0 0 auto;color:#fff;font:700 12px var(--font-mono)}
+.item .nm{font-weight:700;font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .wh{margin-left:auto;font-size:11.5px;color:var(--muted);white-space:nowrap}
+.empty{padding:12px 10px;color:var(--muted);font-size:13px}
+.code{font:600 12px var(--font-mono);padding:2px 7px;border-radius:6px;color:#fff;white-space:nowrap;font-variant-numeric:tabular-nums}
+
+/* floor rail */
+.floors{position:fixed;right:12px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:4px;background:var(--panel);backdrop-filter:blur(10px);padding:6px;border-radius:14px;box-shadow:var(--shadow);z-index:15;border:1px solid var(--line)}
+.floors button{border:0;background:none;width:50px;height:40px;border-radius:10px;font:700 14px var(--font-body);cursor:pointer;color:var(--muted)}
+.floors button:hover{background:var(--hover)}
+.floors button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+
+/* hint bar */
+.hint{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:6px;background:var(--head);color:var(--head-ink);border-radius:999px;padding:6px 6px 6px 16px;box-shadow:var(--shadow);font-size:13px;z-index:15;max-width:calc(100% - 32px);box-sizing:border-box}
+.hint ul{display:flex;gap:16px;list-style:none;margin:0;padding:0;white-space:nowrap;overflow:hidden}
+.hint li{display:flex;align-items:center;gap:5px}
+.hint li b{color:var(--accent);font-weight:700}
+.hint .tg{border:0;background:rgba(255,255,255,.1);width:30px;height:30px;border-radius:50%;cursor:pointer;display:grid;place-items:center;color:var(--head-ink);flex:0 0 auto}
+.hint.min ul{display:none}
+.hint.min{padding-left:6px}
+.hint.min::before{content:"操作說明";padding:0 4px 0 10px}
+.hint .touch{display:none}
+
+/* detail card */
+.card{position:fixed;right:80px;top:calc(86px + env(safe-area-inset-top,0px));width:330px;box-sizing:border-box;background:var(--panel-solid);border-radius:16px;box-shadow:var(--shadow);padding:16px;border:1px solid var(--line);z-index:16}
+.card .cin{max-height:calc(100vh - 220px);overflow-y:auto;overscroll-behavior:contain}
+.card .row{display:flex;gap:10px;align-items:center}
+.card .code{font-size:15px;padding:4px 10px}
+.card h3{margin:0;font-size:19px;font-weight:900;line-height:1.3;text-wrap:balance;min-width:0}
+.card .x{margin-left:auto;border:0;background:var(--chip);width:32px;height:32px;border-radius:9px;cursor:pointer;font-size:15px;flex:0 0 auto}
+.card dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:12px 0 0;font-size:13.5px}
+.card dt{color:var(--muted)}
+.card dd{margin:0;font-weight:500}
+.card .note{margin:10px 0 0;font-size:12px;color:var(--muted)}
+.card .lnk{margin-top:12px;border:1px solid var(--line);background:var(--chip);border-radius:9px;padding:7px 12px;cursor:pointer;font-weight:700;font-size:13px}
+.fl{margin-top:12px}
+.fl h4{margin:0 0 6px;font-size:12px;color:var(--muted);letter-spacing:.08em;display:flex;gap:8px;align-items:center}
+.fl h4 span{font:700 12px var(--font-mono);color:var(--ink);background:var(--chip);padding:1px 7px;border-radius:6px}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{border:0;cursor:pointer;display:flex;align-items:center;gap:5px;background:var(--chip);border-radius:8px;padding:4px 8px 4px 6px;font-size:12.5px;font-weight:500;text-align:left}
+.chip:hover{background:var(--hover)}
+.chip i{width:8px;height:8px;border-radius:3px;flex:0 0 auto}
+.meta{font-size:13px;color:var(--muted);margin:4px 0 0}
+
+/* legend popover */
+.legend{position:fixed;right:12px;top:calc(86px + env(safe-area-inset-top,0px));background:var(--panel-solid);border-radius:14px;box-shadow:var(--shadow);padding:10px;width:200px;box-sizing:border-box;z-index:18;border:1px solid var(--line)}
+.legend h2{font-size:11px;letter-spacing:.12em;color:var(--muted);margin:2px 6px 6px;font-weight:700}
+.legend button{display:flex;align-items:center;gap:8px;width:100%;border:0;background:none;padding:5px 6px;border-radius:8px;cursor:pointer;font-size:13px;text-align:left}
+.legend button:hover{background:var(--hover)}
+.legend button[aria-pressed="true"]{background:var(--chip);font-weight:700}
+.legend .sw{width:14px;height:14px;border-radius:4px;flex:0 0 auto}
+.legend .n{margin-left:auto;font:500 11px var(--font-mono);color:var(--muted)}
+
+/* google map modal */
+.modal{position:fixed;inset:0;background:rgba(10,16,22,.55);z-index:40;display:grid;place-items:center;padding:16px}
+.modal-box{background:var(--panel-solid);border-radius:16px;box-shadow:var(--shadow);width:min(1000px,100%);height:min(720px,100%);display:flex;flex-direction:column;overflow:hidden}
+.modal-h{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.modal-h b{font-size:15px}
+.modal-h a{margin-left:auto;font-size:13px;font-weight:700;color:#2f7fd1;text-decoration:none}
+.modal-h button{border:0;background:var(--chip);width:34px;height:34px;border-radius:9px;cursor:pointer}
+.modal iframe{border:0;flex:1;width:100%}
+
+#tip{position:fixed;pointer-events:none;background:#1c2632;color:#fff;font-size:12.5px;padding:5px 9px;border-radius:7px;white-space:nowrap;transform:translate(12px,12px);z-index:30}
+.credit{position:fixed;right:14px;bottom:calc(16px + env(safe-area-inset-bottom,0px));font-size:11px;color:var(--muted);max-width:26ch;text-align:right;line-height:1.45;z-index:5}
+
+/* 3D labels */
+.tag{pointer-events:auto;cursor:pointer;display:flex;align-items:stretch;border-radius:7px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.18);font:700 12px var(--font-body);white-space:nowrap;transform:translateY(-6px);user-select:none}
+.tag b{background:var(--panel-solid);color:var(--ink);padding:3px 7px;font-weight:700}
+.tag i{font:600 11px var(--font-mono);font-style:normal;color:#fff;padding:3px 6px;display:flex;align-items:center}
+.tag.wc b{padding:2px 5px;font-size:10.5px;font-weight:500;color:var(--muted)}
+.tag.sel{outline:3px solid var(--accent)}
+.btag{pointer-events:auto;cursor:pointer;background:#1c2632;color:#fff;font:900 13px var(--font-body);padding:5px 10px;border-radius:8px;box-shadow:0 3px 10px rgba(0,0,0,.25);white-space:nowrap;letter-spacing:.04em}
+.btag small{font:600 11px var(--font-mono);color:#f2b705;margin-right:6px}
+.ltag{pointer-events:auto;cursor:pointer;background:rgba(255,255,255,.9);color:#3a4652;font:500 11.5px var(--font-body);padding:3px 8px;border-radius:999px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.15)}
+.compact .tag i,.compact .tag.wc,.compact .tag .full{display:none}
+.tag .sh{display:none}.compact .tag .sh{display:inline}
+.nolabels .tag{display:none!important}
+
+@media (max-width:860px){
+  .hb .t{display:none}
+  .credit{display:none}
+}
+@media (max-width:720px){
+  .head{height:56px;left:8px;right:8px;top:calc(8px + env(safe-area-inset-top,0px));padding:0 8px;gap:8px}
+  .seal{display:none}
+  .menu{display:flex}
+  .ttl h1{font-size:15px}
+  .ttl p{display:none}
+  .hbtns{gap:4px}
+  .hb{height:38px;min-width:38px;padding:0 8px}
+  .hb.opt{display:none}
+  .side{backdrop-filter:none;background:var(--panel-solid);left:8px;right:8px;width:auto;top:calc(72px + env(safe-area-inset-top,0px));bottom:calc(72px + env(safe-area-inset-bottom,0px));z-index:25}
+  .side:not(.open){display:none}
+  .side .side-h .x{display:none}
+  .floors{top:auto;transform:none;bottom:calc(12px + env(safe-area-inset-bottom,0px));left:8px;right:8px;flex-direction:row;justify-content:space-between;overflow-x:auto}
+  .floors button{width:auto;flex:1;min-width:40px;height:38px;font-size:13px}
+  .hint{display:none}
+  .card{left:8px;right:8px;width:auto;top:auto;bottom:calc(68px + env(safe-area-inset-bottom,0px))}
+  .card .cin{max-height:40vh}
+  .legend{right:8px;top:calc(72px + env(safe-area-inset-top,0px))}
+}
+@media (hover:none){ .hint .mouse{display:none} .hint .touch{display:flex} }
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+
+</head>
+<body>
+<div id="stage"><div id="labels"></div></div>
+
+<header class="head">
+  <button class="hb menu" id="menuBtn" type="button" aria-label="校園導覽選單" aria-pressed="false"><svg class="i" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+  <div class="seal" aria-hidden="true">深</div>
+  <div class="ttl"><h1>深坑國小 3D 互動校園導覽</h1><p>新北市深坑區深坑國民小學 · 115 學年度教室配置（115.06.10 版）</p></div>
+  <div class="hbtns">
+    <button class="hb" id="homeBtn" type="button" title="回到鳥瞰視角" aria-label="鳥瞰"><svg class="i" viewBox="0 0 24 24"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/></svg><span class="t">鳥瞰</span></button>
+    <button class="hb opt" id="spinBtn" type="button" title="自動旋轉" aria-label="自動旋轉" aria-pressed="false"><svg class="i" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg><span class="t">旋轉</span></button>
+    <button class="hb opt" id="lblBtn" type="button" title="顯示教室標籤" aria-label="教室標籤" aria-pressed="true"><svg class="i" viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.3"/></svg><span class="t">標籤</span></button>
+    <button class="hb" id="legBtn" type="button" title="空間類別圖例" aria-label="圖例" aria-pressed="false"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg><span class="t">圖例</span></button>
+    <span id="mapSlot"></span>
+    <button class="hb" id="themeBtn" type="button" title="切換深色／淺色" aria-label="切換深色模式"><svg class="i" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></button>
+  </div>
+</header>
+
+<aside class="side" id="side" aria-label="校園導覽">
+  <div class="side-h"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg>校園導覽<button class="x" id="sideX" type="button" aria-label="收合導覽" aria-expanded="true">−</button></div>
+  <div class="side-b">
+    <div class="search" role="search">
+      <svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="找教室：143、四年1班、健康中心" autocomplete="off" aria-label="搜尋教室或地點">
+    </div>
+    <div class="list" id="list"></div>
+  </div>
+</aside>
+
+<nav class="floors" id="floors" aria-label="切換樓層"></nav>
+
+<div class="hint" id="hint">
+  <ul class="mouse"><li><b>滑鼠左鍵</b>旋轉視角</li><li><b>滑鼠右鍵</b>平移鏡頭</li><li><b>滾輪</b>放大／縮小</li><li><b>點擊建築物</b>查看詳細資訊</li></ul>
+  <ul class="touch"><li><b>單指</b>旋轉</li><li><b>雙指</b>縮放／平移</li><li><b>點一下</b>查看資訊</li></ul>
+  <button class="tg" id="hintTg" type="button" aria-label="收合操作說明" aria-expanded="true"><svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="m6 9 6 6 6-6"/></svg></button>
+</div>
+
+<aside class="legend" id="legend" hidden aria-label="空間類別"><h2>空間類別 · 點選可篩選</h2><div id="legendList"></div></aside>
+<section class="card" id="card" hidden aria-live="polite"></section>
+<div class="credit">依深坑國小 115 學年度教室配置圖與衛星空拍位置繪製，比例為示意。</div>
+<div id="tip" hidden></div>
+<div class="modal" id="mapModal" hidden></div>
+
+<script type="application/json" id="data">{"buildings":[{"id":"B1","no":1,"name":"平埔樓","axis":"x","cross":24,"corr":1,"region":[16,36,17,61],"floors":[0,1,2,3,4]},{"id":"B2","no":2,"name":"忠孝樓","axis":"x","cross":52,"corr":-1,"region":[50,58,17,60],"floors":[1,2]},{"id":"B3","no":3,"name":"山水樓","axis":"x","cross":67,"corr":-1,"region":[62,76,8,69],"floors":[0,1,2]},{"id":"B4","no":4,"name":"簪纓樓","axis":"z","cross":77,"corr":-1,"region":[16,58,63,87],"floors":[0,1,2,3,4,5]},{"id":"B6","no":6,"name":"仁愛樓","axis":"z","cross":12,"corr":1,"region":[6,40,8,16],"floors":[1,2]},{"id":"B7","no":7,"name":"信義樓","axis":"x","cross":9,"corr":1,"region":[6,12,18,30],"floors":[1]},{"id":"B8","no":8,"name":"和平樓","axis":"x","cross":9,"corr":1,"region":[6,12,45,61],"floors":[1]},{"id":"B9","no":9,"name":"校長宿舍","axis":"x","cross":9,"corr":1,"region":[6,12,79,87],"floors":[1]}],"rooms":[{"b":"B1","code":"141","name":"教室","short":null,"cat":"service","dot":true,"a0":17,"a1":21,"f0":0,"f1":1,"attach":false,"raw":"● 141","floors":[4]},{"b":"B1","code":"","name":"1號樓梯","short":null,"cat":"stair","dot":false,"a0":21,"a1":23,"f0":0,"f1":1,"attach":false,"raw":"1 號 樓梯","floors":[1,2,3,4]},{"b":"B1","code":"142","name":"中課後","short":null,"cat":"after","dot":true,"a0":23,"a1":27,"f0":0,"f1":1,"attach":false,"raw":"●中課後142","floors":[4]},{"b":"B1","code":"143","name":"四年1班","short":"四1","cat":"class","dot":false,"a0":27,"a1":31,"f0":0,"f1":1,"attach":false,"raw":"四1 143","floors":[4]},{"b":"B1","code":"144","name":"四年2班","short":"四2","cat":"class","dot":false,"a0":31,"a1":35,"f0":0,"f1":1,"attach":false,"raw":"四2 144","floors":[4]},{"b":"B1","code":"","name":"2號樓梯","short":null,"cat":"stair","dot":false,"a0":35,"a1":37,"f0":0,"f1":1,"attach":false,"raw":"2號 樓梯","floors":[1,2,3,4]},{"b":"B1","code":"","name":"教師休息室（午餐配置）","short":null,"cat":"admin","dot":false,"a0":37,"a1":41,"f0":0,"f1":1,"attach":false,"raw":"教師休息室                     午餐配置","floors":[4]},{"b":"B1","code":"","name":"3號樓梯","short":null,"cat":"stair","dot":false,"a0":41,"a1":43,"f0":0,"f1":1,"attach":false,"raw":"3號 樓梯","floors":[1,2,3,4]},{"b":"B1","code":"146","name":"四年3班","short":"四3","cat":"class","dot":false,"a0":43,"a1":47,"f0":0,"f1":1,"attach":false,"raw":"四3 146","floors":[4]},{"b":"B1","code":"147","name":"四年4班","short":"四4","cat":"class","dot":false,"a0":47,"a1":51,"f0":0,"f1":1,"attach":false,"raw":"四4 147","floors":[4]},{"b":"B1","code":"148","name":"四年5班","short":"四5","cat":"class","dot":false,"a0":51,"a1":55,"f0":0,"f1":1,"attach":false,"raw":"四5 148","floors":[4]},{"b":"B1","code":"","name":"4號樓梯","short":null,"cat":"stair","dot":false,"a0":55,"a1":57,"f0":0,"f1":1,"attach":false,"raw":"4 號 樓梯","floors":[1,2,3,4]},{"b":"B1","code":"148T","name":"男廁","short":null,"cat":"toilet","dot":false,"a0":57,"a1":61,"f0":0,"f1":0.5,"attach":false,"raw":"男廁    148T","floors":[4]},{"b":"B1","code":"148G","name":"女廁","short":null,"cat":"toilet","dot":false,"a0":57,"a1":61,"f0":0.5,"f1":1,"attach":false,"raw":"女廁    148G","floors":[4]},{"b":"B1","code":"131","name":"儲藏室","short":null,"cat":"service","dot":true,"a0":17,"a1":21,"f0":0,"f1":1,"attach":false,"raw":"● 131儲藏室","floors":[3]},{"b":"B1","code":"132","name":"學生校史室","short":null,"cat":"library","dot":true,"a0":23,"a1":27,"f0":0,"f1":1,"attach":false,"raw":"●132 學生校史室","floors":[3]},{"b":"B1","code":"133","name":"三年1班","short":"三1","cat":"class","dot":false,"a0":27,"a1":31,"f0":0,"f1":1,"attach":false,"raw":"三1 133","floors":[3]},{"b":"B1","code":"134","name":"三年2班","short":"三2","cat":"class","dot":false,"a0":31,"a1":35,"f0":0,"f1":1,"attach":false,"raw":"三2 134","floors":[3]},{"b":"B1","code":"135","name":"三年3班","short":"三3","cat":"class","dot":false,"a0":37,"a1":41,"f0":0,"f1":1,"attach":false,"raw":"三3 135","floors":[3]},{"b":"B1","code":"136","name":"三年4班","short":"三4","cat":"class","dot":false,"a0":43,"a1":47,"f0":0,"f1":1,"attach":false,"raw":"三4 136","floors":[3]},{"b":"B1","code":"137","name":"三年5班","short":"三5","cat":"class","dot":false,"a0":47,"a1":51,"f0":0,"f1":1,"attach":false,"raw":"三5 137","floors":[3]},{"b":"B1","code":"138","name":"三年6班","short":"三6","cat":"class","dot":false,"a0":51,"a1":55,"f0":0,"f1":1,"attach":false,"raw":"三6 138","floors":[3]},{"b":"B1","code":"138T","name":"男廁","short":null,"cat":"toilet","dot":false,"a0":57,"a1":61,"f0":0,"f1":0.5,"attach":false,"raw":"男廁    138T","floors":[3]},{"b":"B1","code":"138G","name":"女廁","short":null,"cat":"toilet","dot":false,"a0":57,"a1":61,"f0":0.5,"f1":1,"attach":false,"raw":"女廁    138G","floors":[3]},{"b":"B1","code":"121T","name":"男廁","short":null,"cat":"toilet","dot":false,"a0":17,"a1":21,"f0":0,"f1":0.5,"attach":false,"raw":"男廁    121T","floors":[2]},{"b":"B1","code":"122","name":"會議室","short":null,"cat":"admin","dot":false,"a0":23,"a1":27,"f0":0,"f1":1,"attach":false,"raw":"會議室 122","floors":[2]},{"b":"B1","code":"123","name":"視聽教室","short":null,"cat":"special","dot":false,"a0":27,"a1":31,"f0":0,"f1":1,"attach":false,"raw":"視聽教室 123","floors":[2]},{"b":"B1","code":"124","name":"視聽教室","short":null,"cat":"special","dot":false,"a0":31,"a1":35,"f0":0,"f1":1,"attach":false,"raw":"視聽教室124","floors":[2]},{"b":"B1","code":"125","name":"校史室","short":null,"cat":"library","dot":false,"a0":37,"a1":41,"f0":0,"f1":1,"attach":false,"raw":"校史室125","floors":[2]},{"b":"B1","code":"126","name":"校長室","short":null,"cat":"admin","dot":false,"a0":43,"a1":47,"f0":0,"f1":1,"attach":false,"raw":"校長室126","floors":[2]},{"b":"B1","code":"127","name":"圖書室","short":null,"cat":"library","dot":false,"a0":47,"a1":51,"f0":0,"f1":1,"attach":false,"raw":"圖書室 127","floors":[2]},{"b":"B1","code":"128","name":"圖書室","short":null,"cat":"library","dot":false,"a0":51,"a1":55,"f0":0,"f1":1,"attach":false,"raw":"圖書室 128","floors":[2]},{"b":"B1","code":"129","name":"愛的書庫","short":null,"cat":"library","dot":false,"a0":57,"a1":61,"f0":0,"f1":1,"attach":false,"raw":"愛的 書庫 129","floors":[2]},{"b":"B1","code":"121G","name":"女廁","short":null,"cat":"toilet","dot":false,"a0":17,"a1":21,"f0":0.5,"f1":1,"attach":false,"raw":"女廁    121G","floors":[2]},{"b":"B1","code":"111T","name":"男廁","short":null,"cat":"toilet","dot":false,"a0":17,"a1":21,"f0":0,"f1":0.5,"attach":false,"raw":"男廁    111T","floors":[1]},{"b":"B1","code":"112","name":"校友會、家長會、退休教師聯誼會辦公室","short":null,"cat":"admin","dot":false,"a0":23,"a1":27,"f0":0,"f1":1,"attach":false,"raw":"校友會、家長會、退休教師聯誼會辦公室 112","floors":[1]},{"b":"B1","code":"113","name":"播音室","short":null,"cat":"admin","dot":false,"a0":27,"a1":31,"f0":0,"f1":1,"attach":false,"raw":"播音室 113","floors":[1]},{"b":"B1","code":"114","name":"學務處","short":null,"cat":"admin","dot":false,"a0":31,"a1":35,"f0":0,"f1":1,"attach":false,"raw":"學務處 114","floors":[1]},{"b":"B1","code":"","name":"1號川堂","short":null,"cat":"hall","dot":false,"a0":37,"a1":41,"f0":0,"f1":1,"attach":false,"raw":"1號  川堂","floors":[1]},{"b":"B1","code":"116","name":"總務處","short":null,"cat":"admin","dot":false,"a0":43,"a1":47,"f0":0,"f1":1,"attach":false,"raw":"總務處116","floors":[1]},{"b":"B1","code":"117","name":"教務處","short":null,"cat":"admin","dot":false,"a0":47,"a1":51,"f0":0,"f1":1,"attach":false,"raw":"教務處 117","floors":[1]},{"b":"B1","code":"118","name":"輔導室","short":null,"cat":"care","dot":false,"a0":51,"a1":55,"f0":0,"f1":1,"attach":false,"raw":"輔導室 118","floors":[1]},{"b":"B1","code":"118T","name":"男廁（幼兒）","short":null,"cat":"toilet","dot":false,"a0":57,"a1":61,"f0":0,"f1":0.5,"attach":false,"raw":"幼男廁    118T","floors":[1]},{"b":"B1","code":"","name":"值勤室","short":null,"cat":"admin","dot":false,"a0":35,"a1":37,"f0":0.25,"f1":1,"attach":false,"raw":"值 勤 室","floors":[1]},{"b":"B1","code":"","name":"印刷室","short":null,"cat":"admin","dot":false,"a0":41,"a1":43,"f0":0.25,"f1":1,"attach":false,"raw":"印刷室","floors":[1]},{"b":"B1","code":"111G","name":"女廁","short":null,"cat":"toilet","dot":false,"a0":17,"a1":21,"f0":0.5,"f1":1,"attach":false,"raw":"女廁    111G","floors":[1]},{"b":"B1","code":"118G","name":"女廁（幼兒）","short":null,"cat":"toilet","dot":false,"a0":57,"a1":61,"f0":0.5,"f1":1,"attach":false,"raw":"幼女廁    118G","floors":[1]},{"b":"B1","code":"101","name":"地下室","short":null,"cat":"service","dot":false,"a0":17,"a1":34,"f0":0,"f1":1,"attach":false,"raw":"地下室101","floors":[0]},{"b":"B1","code":"101E","name":"電器室","short":null,"cat":"service","dot":false,"a0":37,"a1":41,"f0":0,"f1":1,"attach":false,"raw":"電器室101E","floors":[0]},{"b":"B1","code":"102","name":"地下室（國樂教室）","short":null,"cat":"special","dot":false,"a0":41,"a1":61,"f0":0,"f1":1,"attach":false,"raw":"地下室102（國樂教室）","floors":[0]},{"b":"B2","code":"221T","name":"男廁","short":null,"cat":"toilet","dot":false,"a0":17,"a1":21,"f0":0,"f1":0.5,"attach":false,"raw":"男廁    221T","floors":[2]},{"b":"B2","code":"","name":"10號樓梯","short":null,"cat":"stair","dot":false,"a0":21,"a1":23,"f0":0,"f1":1,"attach":false,"raw":"10號 樓梯","floors":[1,2]},{"b":"B2","code":"221","name":"中高課後教室","short":null,"cat":"after","dot":true,"a0":23,"a1":27,"f0":0,"f1":1,"attach":false,"raw":"●中高課後教室 221","floors":[2]},{"b":"B2","code":"222","name":"表演藝術教室","short":null,"cat":"special","dot":false,"a0":27,"a1":31,"f0":0,"f1":1,"attach":false,"raw":"表演藝術教室 222","floors":[2]},{"b":"B2","code":"223","name":"英語教室一","short":null,"cat":"special","dot":false,"a0":31,"a1":35,"f0":0,"f1":1,"attach":false,"raw":"英語 教室  一    223","floors":[2]},{"b":"B2","code":"224/225","name":"美勞教室二／陶藝教室","short":null,"cat":"special","dot":false,"a0":35,"a1":43,"f0":0,"f1":1,"attach":false,"raw":"美勞教室二/陶藝教室  224/225","floors":[2]},{"b":"B2","code":"226","name":"檔案室","short":null,"cat":"admin","dot":false,"a0":43,"a1":47,"f0":0,"f1":1,"attach":false,"raw":"檔案室  226","floors":[2]},{"b":"B2","code":"227","name":"英語教室二","short":null,"cat":"special","dot":false,"a0":47,"a1":51,"f0":0,"f1":1,"attach":false,"raw":"英語 教室二  227","floors":[2]},{"b":"B2","code":"228","name":"英語教室三","short":null,"cat":"special","dot":false,"a0":51,"a1":55,"f0":0,"f1":1,"attach":false,"raw":"英語 教室三  228","floors":[2]},{"b":"B2","code":"229","name":"科任&社團多功能教室","short":null,"cat":"special","dot":true,"a0":55,"a1":60,"f0":0,"f1":1,"attach":false,"raw":"●科任&社團多功能教室 229","floors":[2]},{"b":"B2","code":"221G","name":"女廁","short":null,"cat":"toilet","dot":false,"a0":17,"a1":21,"f0":0.5,"f1":1,"attach":false,"raw":"女廁    221G","floors":[2]},{"b":"B2","code":"211T","name":"男廁","short":null,"cat":"toilet","dot":false,"a0":17,"a1":21,"f0":0,"f1":0.5,"attach":false,"raw":"男廁    211T","floors":[1]},{"b":"B2","code":"211","name":"特教生活教室","short":null,"cat":"care","dot":false,"a0":23,"a1":27,"f0":0,"f1":1,"attach":false,"raw":"特教生活教室211","floors":[1]},{"b":"B2","code":"212","name":"特教學習中心","short":null,"cat":"care","dot":false,"a0":27,"a1":31,"f0":0,"f1":1,"attach":false,"raw":"特教學習中心212","floors":[1]},{"b":"B2","code":"213","name":"特教學習中心","short":null,"cat":"care","dot":false,"a0":31,"a1":35,"f0":0,"f1":1,"attach":false,"raw":"特教學習中心213","floors":[1]},{"b":"B2","code":"214","name":"視聽器材室","short":null,"cat":"service","dot":false,"a0":35,"a1":37,"f0":0,"f1":1,"attach":false,"raw":"視聽器材室 214","floors":[1]},{"b":"B2","code":"","name":"2號川堂","short":null,"cat":"hall","dot":false,"a0":37,"a1":41,"f0":0,"f1":0.5,"attach":false,"raw":"2號   川堂","floors":[1]},{"b":"B2","code":"215","name":"自行車室","short":null,"cat":"service","dot":false,"a0":41,"a1":43,"f0":0,"f1":1,"attach":false,"raw":"自行車室215","floors":[1]},{"b":"B2","code":"216","name":"特教學習中心","short":null,"cat":"care","dot":false,"a0":43,"a1":47,"f0":0,"f1":1,"attach":false,"raw":"特教學習中心216","floors":[1]},{"b":"B2","code":"217","name":"特教知動教室","short":null,"cat":"care","dot":false,"a0":47,"a1":51,"f0":0,"f1":1,"attach":false,"raw":"特教知動教室       217","floors":[1]},{"b":"B2","code":"218","name":"特教學習中心","short":null,"cat":"care","dot":false,"a0":51,"a1":55,"f0":0,"f1":1,"attach":false,"raw":"特教學習中心218","floors":[1]},{"b":"B2","code":"219","name":"健康中心","short":null,"cat":"care","dot":false,"a0":55,"a1":59,"f0":0,"f1":1,"attach":false,"raw":"健康 中心219","floors":[1]},{"b":"B2","code":"2110","name":"儲藏室","short":null,"cat":"service","dot":false,"a0":59,"a1":60,"f0":0,"f1":1,"attach":false,"raw":"儲藏室 2110","floors":[1]},{"b":"B2","code":"211G","name":"女廁","short":null,"cat":"toilet","dot":false,"a0":17,"a1":21,"f0":0.5,"f1":1,"attach":false,"raw":"女廁    211G","floors":[1]},{"b":"B3","code":"","name":"廚房","short":null,"cat":"service","dot":false,"a0":8,"a1":12,"f0":0,"f1":1,"attach":false,"raw":"廚房一F320","floors":[1]},{"b":"B3","code":"321T","name":"男廁","short":null,"cat":"toilet","dot":false,"a0":12,"a1":15,"f0":0,"f1":0.5,"attach":false,"raw":"男廁    321T","floors":[2]},{"b":"B3","code":"","name":"9號樓梯","short":null,"cat":"stair","dot":false,"a0":15,"a1":17,"f0":0,"f1":1,"attach":false,"raw":"9號 樓梯","floors":[1,2]},{"b":"B3","code":"321","name":"二年1班","short":"二1","cat":"class","dot":false,"a0":17,"a1":21,"f0":0,"f1":1,"attach":false,"raw":"二1 321","floors":[2]},{"b":"B3","code":"322","name":"二年2班","short":"二2","cat":"class","dot":false,"a0":21,"a1":25,"f0":0,"f1":1,"attach":false,"raw":"二2 322","floors":[2]},{"b":"B3","code":"323","name":"二年3班","short":"二3","cat":"class","dot":false,"a0":25,"a1":29,"f0":0,"f1":1,"attach":false,"raw":"二3 323","floors":[2]},{"b":"B3","code":"324","name":"二年4班","short":"二4","cat":"class","dot":false,"a0":29,"a1":33,"f0":0,"f1":1,"attach":false,"raw":"二4 324","floors":[2]},{"b":"B3","code":"325","name":"教室","short":null,"cat":"service","dot":false,"a0":33,"a1":37,"f0":0,"f1":1,"attach":false,"raw":"325","floors":[2]},{"b":"B3","code":"","name":"8號樓梯","short":null,"cat":"stair","dot":false,"a0":37,"a1":41,"f0":0,"f1":1,"attach":false,"raw":"8號 樓梯","floors":[1,2]},{"b":"B3","code":"326","name":"一年1班","short":"一1","cat":"class","dot":false,"a0":41,"a1":45,"f0":0,"f1":1,"attach":false,"raw":"一1 326","floors":[2]},{"b":"B3","code":"327","name":"一年2班","short":"一2","cat":"class","dot":false,"a0":45,"a1":49,"f0":0,"f1":1,"attach":false,"raw":"一2 327","floors":[2]},{"b":"B3","code":"328","name":"一年3班","short":"一3","cat":"class","dot":false,"a0":49,"a1":53,"f0":0,"f1":1,"attach":false,"raw":"一3 328","floors":[2]},{"b":"B3","code":"329","name":"低課後","short":null,"cat":"after","dot":true,"a0":53,"a1":57,"f0":0,"f1":1,"attach":false,"raw":"329 ●低課後","floors":[2]},{"b":"B3","code":"3210","name":"低課後","short":null,"cat":"after","dot":true,"a0":57,"a1":61,"f0":0,"f1":1,"attach":false,"raw":"3210●低課後","floors":[2]},{"b":"B3","code":"","name":"7號樓梯","short":null,"cat":"stair","dot":false,"a0":61,"a1":65,"f0":0,"f1":1,"attach":false,"raw":"7 號 樓梯","floors":[1,2]},{"b":"B3","code":"3210T","name":"男廁","short":null,"cat":"toilet","dot":false,"a0":65,"a1":69,"f0":0,"f1":0.5,"attach":false,"raw":"男廁所3210T","floors":[2]},{"b":"B3","code":"321G","name":"女廁","short":null,"cat":"toilet","dot":false,"a0":12,"a1":15,"f0":0.5,"f1":1,"attach":false,"raw":"女廁    321G","floors":[2]},{"b":"B3","code":"3210G","name":"女廁","short":null,"cat":"toilet","dot":false,"a0":65,"a1":69,"f0":0.5,"f1":1,"attach":false,"raw":"女廁所3210G","floors":[2]},{"b":"B3","code":"","name":"廚房","short":null,"cat":"service","dot":false,"a0":8,"a1":12,"f0":0,"f1":1,"attach":false,"raw":"廚房二F310","floors":[2]},{"b":"B3","code":"311T","name":"男廁","short":null,"cat":"toilet","dot":false,"a0":12,"a1":15,"f0":0,"f1":0.5,"attach":false,"raw":"男廁    311T","floors":[1]},{"b":"B3","code":"311","name":"配膳室","short":null,"cat":"service","dot":false,"a0":17,"a1":21,"f0":0,"f1":1,"attach":false,"raw":"311配膳室","floors":[1]},{"b":"B3","code":"312","name":"配膳室二","short":null,"cat":"service","dot":false,"a0":21,"a1":25,"f0":0,"f1":1,"attach":false,"raw":"312配膳室2","floors":[1]},{"b":"B3","code":"313","name":"美勞教室","short":null,"cat":"special","dot":false,"a0":25,"a1":29,"f0":0,"f1":1,"attach":false,"raw":"313美勞教室","floors":[1]},{"b":"B3","code":"314","name":"一年4班","short":"一4","cat":"class","dot":false,"a0":29,"a1":33,"f0":0,"f1":1,"attach":false,"raw":"一4 314","floors":[1]},{"b":"B3","code":"315","name":"低年級圖書","short":null,"cat":"library","dot":true,"a0":33,"a1":37,"f0":0,"f1":1,"attach":false,"raw":"315●低年級圖書","floors":[1]},{"b":"B3","code":"316","name":"體材室","short":null,"cat":"service","dot":true,"a0":41,"a1":45,"f0":0,"f1":1,"attach":false,"raw":"316●體材室","floors":[1]},{"b":"B3","code":"317","name":"低課後","short":null,"cat":"after","dot":true,"a0":45,"a1":49,"f0":0,"f1":1,"attach":false,"raw":"317●低課後","floors":[1]},{"b":"B3","code":"318","name":"低課後","short":null,"cat":"after","dot":true,"a0":49,"a1":53,"f0":0,"f1":1,"attach":false,"raw":"318 ●低課後","floors":[1]},{"b":"B3","code":"319","name":"二年5班","short":"二5","cat":"class","dot":false,"a0":53,"a1":57,"f0":0,"f1":1,"attach":false,"raw":"二5 319","floors":[1]},{"b":"B3","code":"3110","name":"低課後","short":null,"cat":"after","dot":true,"a0":57,"a1":61,"f0":0,"f1":1,"attach":false,"raw":"3110●低課後","floors":[1]},{"b":"B3","code":"3110T","name":"男廁","short":null,"cat":"toilet","dot":false,"a0":65,"a1":69,"f0":0,"f1":0.5,"attach":false,"raw":"男廁所3110T","floors":[1]},{"b":"B3","code":"","name":"3號川堂","short":null,"cat":"hall","dot":false,"a0":37,"a1":41,"f0":0.25,"f1":1,"attach":false,"raw":"3號   川堂","floors":[1]},{"b":"B3","code":"311G","name":"女廁","short":null,"cat":"toilet","dot":false,"a0":12,"a1":15,"f0":0.5,"f1":1,"attach":false,"raw":"女廁    311G","floors":[1]},{"b":"B3","code":"3110G","name":"女廁","short":null,"cat":"toilet","dot":false,"a0":65,"a1":69,"f0":0.5,"f1":1,"attach":false,"raw":"女廁所3110G","floors":[1]},{"b":"B3","code":"302","name":"地下室（體操室、舞蹈室、桌球室）","short":null,"cat":"special","dot":false,"a0":41,"a1":69,"f0":0,"f1":1,"attach":false,"raw":"地下室302（體操室、舞蹈室、桌球室）","floors":[0]},{"b":"B4","code":"401","name":"地下室","short":null,"cat":"service","dot":false,"a0":16,"a1":27,"f0":0,"f1":1,"attach":false,"raw":"地下室401","floors":[0]},{"b":"B4","code":"411T","name":"男廁","short":null,"cat":"toilet","dot":false,"a0":16,"a1":19,"f0":0,"f1":1,"attach":false,"raw":"男廁  411T","floors":[1]},{"b":"B4","code":"421T","name":"男廁","short":null,"cat":"toilet","dot":false,"a0":16,"a1":19,"f0":0,"f1":1,"attach":false,"raw":"男廁  421T","floors":[2]},{"b":"B4","code":"431T","name":"男廁","short":null,"cat":"toilet","dot":false,"a0":16,"a1":19,"f0":0,"f1":1,"attach":false,"raw":"男廁  431T","floors":[3]},{"b":"B4","code":"441T","name":"男廁","short":null,"cat":"toilet","dot":false,"a0":16,"a1":19,"f0":0,"f1":1,"attach":false,"raw":"男廁  441T","floors":[4]},{"b":"B4","code":"451T","name":"男廁","short":null,"cat":"toilet","dot":false,"a0":16,"a1":19,"f0":0,"f1":1,"attach":false,"raw":"男廁  451T","floors":[5]},{"b":"B4","code":"411G","name":"女廁","short":null,"cat":"toilet","dot":false,"a0":19,"a1":22,"f0":0,"f1":1,"attach":false,"raw":"女廁    411G","floors":[1]},{"b":"B4","code":"421G","name":"女廁","short":null,"cat":"toilet","dot":false,"a0":19,"a1":22,"f0":0,"f1":1,"attach":false,"raw":"女廁    421G","floors":[2]},{"b":"B4","code":"431G","name":"女廁","short":null,"cat":"toilet","dot":false,"a0":19,"a1":22,"f0":0,"f1":1,"attach":false,"raw":"女廁    431G","floors":[3]},{"b":"B4","code":"441G","name":"女廁","short":null,"cat":"toilet","dot":false,"a0":19,"a1":22,"f0":0,"f1":1,"attach":false,"raw":"女廁    441G","floors":[4]},{"b":"B4","code":"451G","name":"女廁","short":null,"cat":"toilet","dot":false,"a0":19,"a1":22,"f0":0,"f1":1,"attach":false,"raw":"女廁    451G","floors":[5]},{"b":"B4","code":"411","name":"主計&人事室","short":null,"cat":"admin","dot":false,"a0":22,"a1":28,"f0":0,"f1":1,"attach":false,"raw":"主計&人事室 411","floors":[1]},{"b":"B4","code":"421","name":"高課後","short":null,"cat":"after","dot":true,"a0":22,"a1":28,"f0":0,"f1":1,"attach":false,"raw":"●高課後421","floors":[2]},{"b":"B4","code":"431","name":"六年1班","short":"六1","cat":"class","dot":false,"a0":22,"a1":28,"f0":0,"f1":1,"attach":false,"raw":"六1 431","floors":[3]},{"b":"B4","code":"441","name":"四年6班","short":"四6","cat":"class","dot":false,"a0":22,"a1":28,"f0":0,"f1":1,"attach":false,"raw":"四6 441","floors":[4]},{"b":"B4","code":"451","name":"電腦教室一","short":null,"cat":"special","dot":false,"a0":22,"a1":28,"f0":0,"f1":1,"attach":false,"raw":"電腦教室一   451","floors":[5]},{"b":"B4","code":"","name":"5號樓梯","short":null,"cat":"stair","dot":false,"a0":27,"a1":33,"f0":0,"f1":1,"attach":true,"raw":"5號 樓梯","floors":[0,1,2,3,4,5]},{"b":"B4","code":"412","name":"諮商室","short":null,"cat":"care","dot":false,"a0":28,"a1":34,"f0":0,"f1":1,"attach":false,"raw":"諮商室 412","floors":[1]},{"b":"B4","code":"422","name":"五年1班","short":"五1","cat":"class","dot":false,"a0":28,"a1":34,"f0":0,"f1":1,"attach":false,"raw":"五1 422","floors":[2]},{"b":"B4","code":"432","name":"六年2班","short":"六2","cat":"class","dot":false,"a0":28,"a1":34,"f0":0,"f1":1,"attach":false,"raw":"六2 432","floors":[3]},{"b":"B4","code":"442","name":"六年6班","short":"六6","cat":"class","dot":false,"a0":28,"a1":34,"f0":0,"f1":1,"attach":false,"raw":"六6 442","floors":[4]},{"b":"B4","code":"452","name":"電腦教室二","short":null,"cat":"special","dot":false,"a0":28,"a1":34,"f0":0,"f1":1,"attach":false,"raw":"電腦教室二   452","floors":[5]},{"b":"B4","code":"","name":"2號電梯","short":null,"cat":"stair","dot":false,"a0":33,"a1":39,"f0":0,"f1":1,"attach":true,"raw":"2號電梯","floors":[0,1,2,3,4,5]},{"b":"B4","code":"413","name":"團體諮商室","short":null,"cat":"care","dot":false,"a0":34,"a1":40,"f0":0,"f1":1,"attach":false,"raw":"團體諮商室413","floors":[1]},{"b":"B4","code":"423","name":"五年2班","short":"五2","cat":"class","dot":false,"a0":34,"a1":40,"f0":0,"f1":1,"attach":false,"raw":"五2 423","floors":[2]},{"b":"B4","code":"433","name":"六年3班","short":"六3","cat":"class","dot":false,"a0":34,"a1":40,"f0":0,"f1":1,"attach":false,"raw":"六3 433","floors":[3]},{"b":"B4","code":"443","name":"六年5班","short":"六5","cat":"class","dot":false,"a0":34,"a1":40,"f0":0,"f1":1,"attach":false,"raw":"六5 443","floors":[4]},{"b":"B4","code":"453","name":"自然教室一","short":null,"cat":"special","dot":false,"a0":34,"a1":40,"f0":0,"f1":1,"attach":false,"raw":"自然 教室 一  453","floors":[5]},{"b":"B4","code":"402","name":"地下室","short":null,"cat":"service","dot":false,"a0":39,"a1":52,"f0":0,"f1":1,"attach":false,"raw":"地 下 室 402","floors":[0]},{"b":"B4","code":"414","name":"特教學習中心","short":null,"cat":"care","dot":false,"a0":40,"a1":46,"f0":0,"f1":1,"attach":false,"raw":"特教學習中心414","floors":[1]},{"b":"B4","code":"424","name":"五年3班","short":"五3","cat":"class","dot":false,"a0":40,"a1":46,"f0":0,"f1":1,"attach":false,"raw":"五3 424","floors":[2]},{"b":"B4","code":"434","name":"六年4班","short":"六4","cat":"class","dot":false,"a0":40,"a1":46,"f0":0,"f1":1,"attach":false,"raw":"六4 434","floors":[3]},{"b":"B4","code":"444A","name":"科任辦公室","short":null,"cat":"admin","dot":false,"a0":40,"a1":43,"f0":0,"f1":1,"attach":false,"raw":"科任辦公室444A","floors":[4]},{"b":"B4","code":"454A","name":"教材教具室","short":null,"cat":"service","dot":false,"a0":40,"a1":43,"f0":0,"f1":1,"attach":false,"raw":"教材 教具室 454A","floors":[5]},{"b":"B4","code":"444B","name":"器材室","short":null,"cat":"service","dot":false,"a0":43,"a1":46,"f0":0,"f1":1,"attach":false,"raw":"器材室444B","floors":[4]},{"b":"B4","code":"454B","name":"自然教具室","short":null,"cat":"service","dot":false,"a0":43,"a1":46,"f0":0,"f1":1,"attach":false,"raw":"自然 教具室454B","floors":[5]},{"b":"B4","code":"415","name":"分書","short":null,"cat":"library","dot":true,"a0":46,"a1":52,"f0":0,"f1":1,"attach":false,"raw":"●分書 415","floors":[1]},{"b":"B4","code":"425","name":"五年4班","short":"五4","cat":"class","dot":false,"a0":46,"a1":52,"f0":0,"f1":1,"attach":false,"raw":"五4 425","floors":[2]},{"b":"B4","code":"435","name":"五年6班","short":"五6","cat":"class","dot":false,"a0":46,"a1":52,"f0":0,"f1":1,"attach":false,"raw":"五6 435","floors":[3]},{"b":"B4","code":"445","name":"自然教室二","short":null,"cat":"special","dot":false,"a0":46,"a1":52,"f0":0,"f1":1,"attach":false,"raw":"自然 教室 二 445","floors":[4]},{"b":"B4","code":"455","name":"資訊融入教室","short":null,"cat":"special","dot":false,"a0":46,"a1":52,"f0":0,"f1":1,"attach":false,"raw":"資訊融入教室 455","floors":[5]},{"b":"B4","code":"","name":"6號樓梯","short":null,"cat":"stair","dot":false,"a0":52,"a1":58,"f0":0,"f1":1,"attach":true,"raw":"6號 樓梯","floors":[0,1,2,3,4,5]},{"b":"B4","code":"416","name":"教師準備室暨教師會辦公室","short":null,"cat":"admin","dot":false,"a0":52,"a1":58,"f0":0,"f1":1,"attach":false,"raw":"教師準備室暨教師會辦公室 416","floors":[1]},{"b":"B4","code":"426","name":"五年5班","short":"五5","cat":"class","dot":false,"a0":52,"a1":58,"f0":0,"f1":1,"attach":false,"raw":"五5 426","floors":[2]},{"b":"B4","code":"436","name":"音樂教室三","short":null,"cat":"special","dot":false,"a0":52,"a1":58,"f0":0,"f1":1,"attach":false,"raw":"音樂 教室 三              436","floors":[3]},{"b":"B4","code":"446","name":"音樂教室二","short":null,"cat":"special","dot":false,"a0":52,"a1":58,"f0":0,"f1":1,"attach":false,"raw":"音樂 教室 二 446","floors":[4]},{"b":"B4","code":"456","name":"音樂教室一","short":null,"cat":"special","dot":false,"a0":52,"a1":58,"f0":0,"f1":1,"attach":false,"raw":"音樂 教室 一  456","floors":[5]},{"b":"B6","code":"","name":"12號樓梯","short":null,"cat":"stair","dot":false,"a0":6,"a1":8,"f0":0,"f1":1,"attach":false,"raw":"12號 樓梯","floors":[1,2]},{"b":"B6","code":"621","name":"自然教室（中課後）","short":null,"cat":"special","dot":true,"a0":8,"a1":14,"f0":0,"f1":1,"attach":false,"raw":"自然教室●中課後621-","floors":[2]},{"b":"B6","code":"611","name":"親子廚房","short":null,"cat":"kinder","dot":true,"a0":8,"a1":14,"f0":0,"f1":1,"attach":false,"raw":"● 611e親子廚房","floors":[1]},{"b":"B6","code":"622","name":"故事屋","short":null,"cat":"library","dot":false,"a0":14,"a1":20,"f0":0,"f1":1,"attach":false,"raw":"故事屋 622","floors":[2]},{"b":"B6","code":"612","name":"親子中心","short":null,"cat":"kinder","dot":true,"a0":14,"a1":20,"f0":0,"f1":1,"attach":false,"raw":"●612親子中心","floors":[1]},{"b":"B6","code":"623","name":"自然教室（中課後）","short":null,"cat":"special","dot":true,"a0":20,"a1":26,"f0":0,"f1":1,"attach":false,"raw":"自然教室●中課後 623","floors":[2]},{"b":"B6","code":"613/614","name":"幼兒園","short":null,"cat":"kinder","dot":false,"a0":20,"a1":32,"f0":0,"f1":1,"attach":false,"raw":"幼兒園          613 614","floors":[1]},{"b":"B6","code":"624","name":"地板教室","short":null,"cat":"special","dot":false,"a0":26,"a1":32,"f0":0,"f1":1,"attach":false,"raw":"地板教室  624","floors":[2]},{"b":"B6","code":"625","name":"地板教室","short":null,"cat":"special","dot":false,"a0":32,"a1":38,"f0":0,"f1":1,"attach":false,"raw":"地板教室     625","floors":[2]},{"b":"B6","code":"615","name":"食農教室","short":null,"cat":"special","dot":false,"a0":32,"a1":38,"f0":0,"f1":1,"attach":false,"raw":"食農 教室   615","floors":[1]},{"b":"B6","code":"","name":"11號樓梯","short":null,"cat":"stair","dot":false,"a0":38,"a1":40,"f0":0,"f1":1,"attach":false,"raw":"11號 樓梯","floors":[1,2]},{"b":"B7","code":"711","name":"工友工作室","short":null,"cat":"admin","dot":false,"a0":18,"a1":22,"f0":0,"f1":1,"attach":false,"raw":"工友工作室    711","floors":[1]},{"b":"B7","code":"712","name":"幼園教室C","short":null,"cat":"kinder","dot":false,"a0":22,"a1":26,"f0":0,"f1":1,"attach":false,"raw":"幼園 教室 C 712","floors":[1]},{"b":"B7","code":"713","name":"幼園藝文中心","short":null,"cat":"kinder","dot":false,"a0":26,"a1":30,"f0":0,"f1":1,"attach":false,"raw":"幼園藝文中心713","floors":[1]},{"b":"B8","code":"811","name":"幼園教室A","short":null,"cat":"kinder","dot":false,"a0":45,"a1":49,"f0":0,"f1":1,"attach":false,"raw":"幼園教室A  811","floors":[1]},{"b":"B8","code":"812","name":"幼園教室B","short":null,"cat":"kinder","dot":false,"a0":49,"a1":53,"f0":0,"f1":1,"attach":false,"raw":"幼園 教室 B    812","floors":[1]},{"b":"B8","code":"813","name":"幼園教室C","short":null,"cat":"kinder","dot":false,"a0":53,"a1":57,"f0":0,"f1":1,"attach":false,"raw":"幼園 教室  C    813","floors":[1]},{"b":"B8","code":"814","name":"幼園辦公室","short":null,"cat":"kinder","dot":false,"a0":57,"a1":61,"f0":0,"f1":1,"attach":false,"raw":"幼園      辦公室       814","floors":[1]},{"b":"B9","code":"911","name":"校長宿舍","short":null,"cat":"service","dot":false,"a0":79,"a1":87,"f0":0,"f1":1,"attach":false,"raw":"911","floors":[1]},{"b":"B9","code":"921","name":"校長宿舍","short":null,"cat":"service","dot":false,"a0":79,"a1":87,"f0":0,"f1":1,"attach":false,"raw":"921","floors":[2]}]}</script>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+const MAP_MODE='embed';   // 'embed' (GitHub) or 'link' (Claude artifact)
+const GMAP_LINK='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent('新北市深坑區深坑國民小學');
+const GMAP_EMBED='https://maps.google.com/maps?q='+encodeURIComponent('新北市深坑區深坑國民小學')+'&t=k&z=18&ie=UTF8&iwloc=&output=embed';
+
+const DATA=JSON.parse(document.getElementById('data').textContent);
+const CAT={
+  class:['班級教室','#5b9bd5'], after:['課後照顧','#8cc3e9'], special:['專科／科任教室','#9b7fd1'],
+  library:['圖書／校史','#e3a64a'], admin:['行政辦公','#e07a5f'], care:['特教／輔導／健康','#4fb39a'],
+  kinder:['幼兒園','#ee8db4'], service:['儲藏／設備','#c9bfa8'], toilet:['廁所','#a9b8c4'],
+  stair:['樓梯／電梯','#7d8790'], hall:['川堂','#d9d4c7'],
+};
+const FH=3.6;
+const yBase=f=>f===0?-FH:(f-1)*FH;
+const fl=f=>f===0?'B1':f+'F';
+
+// ---- world placement measured from the satellite view (north up, ~0.235 m per screenshot pixel) ----
+const K=.235, WX=px=>(px-872.5)*K, WZ=py=>(py-551.5)*K;
+const PLACE={
+  B1:{s0:WX(665),s1:WX(1072),c:WZ(336),rd:8.5,cd:3.5,amin:17,amax:61},
+  B2:{s0:WX(720),s1:WX(1075),c:WZ(485),rd:8.5,cd:3.5,amin:17,amax:60},
+  B3:{s0:WX(600),s1:WX(1150),c:WZ(618),rd:9,cd:4,amin:8,amax:69},
+  B4:{s0:WZ(268),s1:WZ(555),c:WX(1126),rd:9,cd:4,amin:16,amax:58},
+  B6:{s0:WZ(208),s1:WZ(432),c:WX(628),rd:8.5,cd:3.5,amin:6,amax:40},
+  B7:{s0:WX(662),s1:WX(775),c:WZ(210),rd:7,cd:2.5,amin:18,amax:30},
+  B8:{s0:WX(1000),s1:WX(1148),c:WZ(210),rd:7,cd:2.5,amin:45,amax:61},
+  B9:{s0:WX(1170),s1:WX(1200),c:WZ(178),rd:7,cd:2.5,amin:79,amax:87},
+};
+const WALL={x0:-77,x1:78,z0:-97,z1:81};
+
+// ---------- renderer / scene ----------
+const stage=document.getElementById('stage');
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+stage.prepend(renderer.domElement);
+const labelsEl=document.getElementById('labels');
+const labelR=new CSS2DRenderer({element:labelsEl});
+const scene=new THREE.Scene();
+function syncSky(){ const c=getComputedStyle(document.documentElement).getPropertyValue('--sky').trim()||'#dce7ec'; scene.background=new THREE.Color(c); scene.fog=new THREE.Fog(c,380,900); }
+syncSky(); matchMedia('(prefers-color-scheme: dark)').addEventListener('change',syncSky);
+new MutationObserver(syncSky).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+const camera=new THREE.PerspectiveCamera(38,1,1,2000);
+const controls=new OrbitControls(camera,renderer.domElement);
+controls.enableDamping=true; controls.dampingFactor=.08; controls.maxPolarAngle=1.42; controls.minDistance=15; controls.maxDistance=600;
+controls.screenSpacePanning=false; controls.autoRotateSpeed=.7;
+
+scene.add(new THREE.HemisphereLight(0xffffff,0x8a9a7a,1.25));
+const sun=new THREE.DirectionalLight(0xfff4e0,1.7);
+sun.position.set(-80,150,100); sun.castShadow=true; sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera,{left:-120,right:120,top:120,bottom:-120,near:10,far:450}); sun.shadow.bias=-.0006;
+scene.add(sun);
+
+const geoBox=new THREE.BoxGeometry(1,1,1);
+const mats={};
+const mat=(hex,o={})=>{const k=hex+JSON.stringify(o); return mats[k]||(mats[k]=new THREE.MeshStandardMaterial({color:hex,roughness:.92,...o}));};
+function box(x0,x1,y0,y1,z0,z1,m,{shadow=true,receive=true}={}){
+  const b=new THREE.Mesh(geoBox,m);
+  b.scale.set(Math.abs(x1-x0),Math.abs(y1-y0),Math.abs(z1-z0));
+  b.position.set((x0+x1)/2,(y0+y1)/2,(z0+z1)/2);
+  b.castShadow=shadow; b.receiveShadow=receive; scene.add(b); return b;
+}
+function label(html,cls,pos,onClick){
+  const el=document.createElement('div'); el.className=cls; el.innerHTML=html;
+  if(onClick){ el.addEventListener('pointerdown',e=>e.stopPropagation()); el.addEventListener('click',e=>{e.stopPropagation();onClick();}); }
+  const o=new CSS2DObject(el); o.position.copy(pos); scene.add(o); return o;
+}
+let seed=7; const rnd=()=>((seed=(seed*16807)%2147483647)/2147483647);
+
+// ---------- ground & site ----------
+const deco=[]; const addDeco=m=>(deco.push(m),m);
+addDeco(box(-700,700,-0.6,-0.05,-700,700,mat('#cdd5cb'),{shadow:false}));
+addDeco(box(WALL.x0,WALL.x1,-0.05,0.02,WALL.z0,WALL.z1,mat('#e6e2d8'),{shadow:false}));
+// 文化街 (north) with centre line, river (south)
+addDeco(box(-700,700,-0.05,0.03,-113,-99,mat('#6f7780'),{shadow:false}));
+for(let x=-400;x<400;x+=8) addDeco(box(x,x+4,0.03,0.06,-106.2,-105.8,mat('#f2c84b'),{shadow:false}));
+addDeco(box(-700,700,-0.3,0.0,86,112,mat('#6f9fa8',{roughness:.35}),{shadow:false}));
+addDeco(box(-700,700,-0.05,0.04,81,86,mat('#8fb07a'),{shadow:false}));
+const patch=(x0,x1,z0,z1,col='#a3c68c')=>addDeco(box(x0,x1,0.02,0.08,z0,z1,mat(col),{shadow:false}));
+patch(-34,44,-42.5,-23.5); patch(-34,46,-7.5,7.5,'#a9cb95'); patch(-20,30,-93,-60,'#b5cf9f'); patch(66.5,77,-62,79); patch(-76,76,74.5,80.5);
+patch(-76,-52,28,72,'#a9cb95');
+patch(-76,-64.5,-59,-28.5,'#a3c68c');
+// 操場 track (oval)
+{
+  const cx=WX(932.5), cz=WZ(772.5), w=88, h=43;
+  const stad=(W,H)=>{const s=new THREE.Shape(), r=H/2, hw=W/2-r; s.moveTo(-hw,-r); s.lineTo(hw,-r); s.absarc(hw,0,r,-Math.PI/2,Math.PI/2,false); s.lineTo(-hw,r); s.absarc(-hw,0,r,Math.PI/2,Math.PI*1.5,false); return s;};
+  const add=(shape,col,y)=>{const g=new THREE.ShapeGeometry(shape,48); const m=new THREE.Mesh(g,mat(col)); m.rotation.x=-Math.PI/2; m.position.set(cx,y,cz); m.receiveShadow=true; scene.add(m); deco.push(m);};
+  add(stad(w,h),'#b7aac4',.09); add(stad(w-12,h-12),'#86b56e',.12);
+  for(const k of [2,4]){ const s=stad(w-k*2,h-k*2), pts=s.getPoints(64).map(p=>new THREE.Vector3(p.x,0,-p.y)); const l=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:.7})); l.position.set(cx,.11,cz); scene.add(l); deco.push(l);}
+}
+// unlabeled grey building south-west (visible on the satellite view, not on the room sheet)
+addDeco(box(WX(662),WX(742),0,7,WZ(720),WZ(858),mat('#c9ccc8'))); addDeco(box(WX(659),WX(745),7,7.6,WZ(717),WZ(861),mat('#a9aeab')));
+// wall with gates
+const wallM=mat('#f0ece2'), wallH=1.8;
+function wallRun(a,b,fixed,axis,gs){ let s=a; for(const [g0,g1] of [...gs,[b,b]]){ if(g0>s){ axis==='x'?addDeco(box(s,g0,0,wallH,fixed-.3,fixed+.3,wallM)):addDeco(box(fixed-.3,fixed+.3,0,wallH,s,g0,wallM)); } s=Math.max(s,g1);} }
+const GATE={main:[1.5,13.5], s2:[-73,-67], s1:[60,65], s3:[0,4], s4:[33,37]};
+wallRun(WALL.x0,WALL.x1,WALL.z0,'x',[GATE.s2,GATE.main,GATE.s1]); wallRun(WALL.x0,WALL.x1,WALL.z1,'x',[]);
+wallRun(WALL.z0,WALL.z1,WALL.x0,'z',[GATE.s3,GATE.s4]); wallRun(WALL.z0,WALL.z1,WALL.x1,'z',[]);
+for(const xx of GATE.main) addDeco(box(xx-.8,xx+.8,0,3.4,WALL.z0-.8,WALL.z0+.8,mat('#8a6f55')));
+addDeco(box(GATE.main[0],GATE.main[1],0.02,0.09,WALL.z0,-62,mat('#d7cfbf'),{shadow:false}));
+
+function tree(x,z,s=1){
+  addDeco(box(x-.35*s,x+.35*s,0,2.2*s,z-.35*s,z+.35*s,mat('#7a5a3c')));
+  const g=new THREE.Mesh(new THREE.IcosahedronGeometry(2.7*s,0),mat(rnd()<.5?'#5c9e57':'#4f8f4f',{flatShading:true}));
+  g.position.set(x,3.7*s,z); g.rotation.y=rnd()*3; g.castShadow=true; scene.add(g); deco.push(g);
+}
+const scatter=(n,x0,x1,z0,z1,skip)=>{ for(let i=0,tries=0;i<n&&tries<200;tries++){ const x=x0+rnd()*(x1-x0), z=z0+rnd()*(z1-z0); if(skip&&skip(x,z)) continue; tree(x,z,.75+rnd()*.5); i++; } };
+scatter(18,-32,42,-41,-26,(x,z)=>Math.abs(x+38)<3);
+scatter(9,-18,28,-92,-62,(x,z)=>x>0&&x<15);
+scatter(6,-32,44,-6,6,(x,z)=>Math.abs(x-6.9)<3);
+scatter(10,68,76,-60,76); scatter(12,-74,74,76,80); scatter(6,-75,-53,30,70,(x,z)=>x>-51);
+scatter(4,-75,-66,-94,-64); scatter(5,-28,58,-95,-90,(x,z)=>x>-1&&x<16);
+
+// ---------- buildings & rooms ----------
+const B={};
+DATA.buildings.forEach(b=>{ B[b.id]=b; Object.assign(b,PLACE[b.id]); b.D=b.rd+b.cd; b.top=Math.max(...b.floors); });
+const floorObjs=[]; const reg=(obj,floor,b,kind)=>{floorObjs.push({obj,floor,b,kind}); return obj;};
+function frame(b){
+  const along=a=>b.s0+(a-b.amin)/(b.amax-b.amin)*(b.s1-b.s0);
+  const lo=b.c-b.D/2, hi=b.c+b.D/2;
+  return {along,lo,hi,rooms:b.corr>0?[lo,lo+b.rd]:[hi-b.rd,hi],corr:b.corr>0?[lo+b.rd,hi]:[lo,lo+b.cd]};
+}
+const place=(b,a0,a1,c0,c1,y0,y1,m,o)=>b.axis==='x'?box(a0,a1,y0,y1,c0,c1,m,o):box(c0,c1,y0,y1,a0,a1,m,o);
+const ext={};
+DATA.rooms.forEach(r=>{ if(r.attach) return; const e=ext[r.b]||(ext[r.b]={}); r.floors.forEach(f=>{ e[f]=e[f]||[1e9,-1e9]; e[f][0]=Math.min(e[f][0],r.a0); e[f][1]=Math.max(e[f][1],r.a1); }); });
+
+const pickables=[];
+DATA.rooms.forEach((r,i)=>{
+  const b=B[r.b], F=frame(b); r.id=i; r.bld=b; r.meshes=[];
+  const base=new THREE.Color(CAT[r.cat][1]);
+  r.floors.forEach(f=>{
+    const a0=F.along(r.a0)+.12, a1=F.along(r.a1)-.12;
+    let c0,c1;
+    if(r.attach){ c0=b.corr<0?F.lo-4:F.hi; c1=b.corr<0?F.lo:F.hi+4; }
+    else if(f===0){ c0=F.lo+r.f0*b.D; c1=F.lo+r.f1*b.D; }
+    else { c0=F.rooms[0]+r.f0*b.rd; c1=F.rooms[0]+r.f1*b.rd; }
+    c0+=.08; c1-=.08;
+    const y0=yBase(f)+.26;
+    const m=new THREE.MeshStandardMaterial({color:base.clone(),roughness:.85});
+    let mesh;
+    if(r.cat==='hall') mesh=place(b,a0,a1,c0,c1,y0,y0+.05,m,{shadow:false});
+    else {
+      mesh=place(b,a0,a1,c0,c1,y0,yBase(f)+FH-.04,m);
+      mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geoBox),new THREE.LineBasicMaterial({color:0x2b3540,transparent:true,opacity:.22})));
+      if(!r.attach&&f>0&&r.cat!=='stair'&&r.cat!=='toilet'){
+        const face=b.corr>0?c1+.03:c0-.03;
+        reg(place(b,a0+.6,a1-.6,face-.02,face+.02,yBase(f)+1.3,yBase(f)+2.7,mat('#cfe3ee',{roughness:.3,metalness:.1}),{shadow:false}),f,b.id,'win');
+      }
+    }
+    mesh.userData={room:r,floor:f,base};
+    reg(mesh,f,b.id,'room'); r.meshes.push(mesh); pickables.push(mesh);
+  });
+});
+const slabM=mat('#ece7dc'), corrM=mat('#d9d6cf'), railM=mat('#f6f3ec'), roofM=mat('#c95b43');
+DATA.buildings.forEach(b=>{
+  const F=frame(b), e=ext[b.id];
+  b.floors.forEach(f=>{
+    const [s0,s1]=e[f]||e[b.top]; const a0=F.along(s0), a1=F.along(s1);
+    const slab=reg(place(b,a0,a1,F.lo,F.hi,yBase(f),yBase(f)+.26,f===0?mat('#b8b2a6'):slabM),f,b.id,'slab'); slab.userData.bld=b; pickables.push(slab);
+    if(f>=1){
+      reg(place(b,a0,a1,F.corr[0],F.corr[1],yBase(f)+.26,yBase(f)+.3,corrM,{shadow:false}),f,b.id,'slab');
+      const edge=b.corr>0?F.hi:F.lo, n=Math.max(1,Math.round((a1-a0)/8));
+      if(f>=2) reg(place(b,a0,a1,edge-.12,edge+.12,yBase(f)+.3,yBase(f)+1.35,railM),f,b.id,'rail');
+      for(let k=0;k<=n;k++){ const a=a0+(a1-a0)*k/n; reg(place(b,a-.24,a+.24,edge-.24,edge+.24,yBase(f),yBase(f)+FH,railM),f,b.id,'rail'); }
+    }
+  });
+  const [s0,s1]=e[b.top]; const yt=yBase(b.top)+FH;
+  b.roof=reg(place(b,F.along(s0)-.7,F.along(s1)+.7,F.lo-.7,F.hi+.7,yt,yt+.55,roofM),b.top,b.id,'roof'); b.roof.userData.bld=b; pickables.push(b.roof);
+  const mid=(F.along(s0)+F.along(s1))/2, cc=(F.lo+F.hi)/2;
+  b.center=b.axis==='x'?new THREE.Vector3(mid,0,cc):new THREE.Vector3(cc,0,mid);
+  b.len=Math.abs(F.along(s1)-F.along(s0));
+  b.label=label(`<small>${b.no}號</small>${b.name}`,'btag',new THREE.Vector3(b.center.x,yt+3,b.center.z),()=>selectBuilding(b));
+});
+// 1號電梯 off 平埔樓's corridor
+{ const b=B.B1, F=frame(b); for(let f=0;f<=b.top;f++) reg(box(F.along(33),F.along(37),yBase(f)+.26,yBase(f)+FH-.04,F.hi,F.hi+3.2,mat('#7d8790')),f,'B1','shaft'); }
+
+// covered walkways
+const walkM=mat('#7fa7b8');
+function walkway(x0,x1,z0,z1){ const along=Math.abs(x1-x0)>Math.abs(z1-z0); addDeco(box(x0,x1,3.1,3.35,z0,z1,walkM));
+  const L=along?x1-x0:z1-z0, n=Math.max(1,Math.round(Math.abs(L)/6));
+  for(let k=0;k<=n;k++){ const t=k/n, px=along?x0+(x1-x0)*t:(x0+x1)/2, pz=along?(z0+z1)/2:z0+(z1-z0)*t;
+    for(const off of [-1.1,1.1]) addDeco(box(px+(along?0:off)-.12,px+(along?0:off)+.12,0,3.1,pz+(along?off:0)-.12,pz+(along?off:0)+.12,railM)); } }
+const fr=id=>frame(B[id]);
+const x55=fr('B1').along(55), x39=fr('B2').along(39);
+walkway(x55-1.2,x55+1.2,fr('B8').hi,fr('B1').lo);
+walkway(-39.4,-37,fr('B1').hi,WZ(445));
+walkway(x39-1.2,x39+1.2,fr('B2').hi,fr('B3').lo);
+walkway(50.5,53,WZ(555),fr('B3').lo);
+walkway(fr('B6').hi,B.B1.s0,-51.2,-48.8);
+walkway(fr('B6').hi,B.B7.s0,-81.2,-78.8);
+
+// landmarks
+const LANDMARKS=[];
+function landmark(name,pos,icon,build){ build&&build(); const o=label(name,'ltag',pos,()=>goLandmark(L)); const L={name,pos,o,icon}; LANDMARKS.push(L); return L; }
+landmark('大門',new THREE.Vector3(7.5,4,WALL.z0),'門');
+landmark('警衛室',new THREE.Vector3(-3,5,-93),'衛',()=>{addDeco(box(-6,-0.5,0,3.2,-95.5,-90.5,mat('#e07a5f'))); addDeco(box(-6.3,-0.2,3.2,3.6,-95.8,-90.2,roofM));});
+landmark('操場',new THREE.Vector3(WX(932.5),3,WZ(772.5)),'跑');
+landmark('典禮臺',new THREE.Vector3(6.5,5,25.5),'臺',()=>{addDeco(box(2.5,10.5,0,1.2,23.5,27.5,mat('#c4b9a4'))); addDeco(box(2.5,10.5,1.2,4.4,23.5,24.2,mat('#b06e4f')));});
+landmark('禮堂',new THREE.Vector3((WX(600)+WX(712))/2,12,(WZ(445)+WZ(548))/2),'禮',()=>{addDeco(box(WX(600),WX(712),0,9,WZ(445),WZ(548),mat('#d9c9a8'))); addDeco(box(WX(597),WX(715),9,9.8,WZ(442),WZ(551),mat('#5d6166')));});
+landmark('簪纓亭',new THREE.Vector3(-58,6.5,74),'亭',()=>{ for(const dx of [-2.6,2.6]) for(const dz of [-2.6,2.6]) addDeco(box(-58+dx-.2,-58+dx+.2,0,3,74+dz-.2,74+dz+.2,mat('#8a3b2c')));
+  const rf=new THREE.Mesh(new THREE.ConeGeometry(5.2,2.6,4),roofM); rf.position.set(-58,4.3,74); rf.rotation.y=Math.PI/4; rf.castShadow=true; scene.add(rf); deco.push(rf); });
+landmark('2號側門',new THREE.Vector3(-70,3,WALL.z0),'門'); landmark('1號側門',new THREE.Vector3(62.5,3,WALL.z0),'門');
+landmark('3號側門',new THREE.Vector3(WALL.x0,3,2),'門'); landmark('4號側門',new THREE.Vector3(WALL.x0,3,35),'門');
+[['1號風雨走廊',x55,-66],['2號風雨走廊',-38.2,-35],['3號風雨走廊',x39,0],['4號風雨走廊',51.7,5],['5號風雨走廊',-50,-50],['6號風雨走廊',-50.5,-80]]
+  .forEach(([n,x,z])=>LANDMARKS.push({name:n,pos:new THREE.Vector3(x,4,z),o:null,icon:'廊'}));
+
+// ---------- room labels ----------
+DATA.rooms.forEach(r=>{
+  if(r.cat==='stair') return;
+  const f=r.floors[0], m=r.meshes[0]; const p=m.position.clone(); p.y=yBase(f)+FH+.4;
+  const col=CAT[r.cat][1];
+  let html;
+  if(r.cat==='toilet') html=`<b>${r.name.includes('男')?'男廁':'女廁'}</b>`;
+  else { const t=r.short||(r.name.length>7?r.name.slice(0,7)+'…':r.name), sh=r.short||(r.name.length>4?r.name.slice(0,4)+'…':r.name);
+    html=`<b><span class="full">${t}</span><span class="sh">${sh}</span></b>${r.code?`<i style="background:${col}">${r.code}</i>`:''}`; }
+  r.label=label(html,'tag'+(r.cat==='toilet'?' wc':''),p,()=>select(r,{fly:true}));
+  if(r.cat!=='toilet'&&!r.code) r.label.element.querySelector('b').style.borderLeft=`4px solid ${col}`;
+});
+
+// ---------- state ----------
+let floorSel='all', catSel=null, selected=null, selB=null;
+const gray=new THREE.Color('#e3e1dc');
+const allFloors=[...new Set(DATA.buildings.flatMap(b=>b.floors))].sort((a,b)=>a-b);
+const floorsNav=document.getElementById('floors');
+[['all','全部'],...allFloors.slice().reverse().map(f=>[f,fl(f)])].forEach(([v,t])=>{
+  const bt=document.createElement('button'); bt.type='button'; bt.textContent=t; bt.dataset.f=v; bt.setAttribute('aria-pressed',v==='all');
+  bt.onclick=()=>{ const f=v==='all'?'all':+v; if(selected&&!selected.floors.includes(f)) select(null); setFloor(f); };
+  floorsNav.append(bt);
+});
+function setFloor(f){ floorSel=f; floorsNav.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.f===String(f)))); applyView(); }
+function applyView(){
+  const sel=floorSel;
+  for(const {obj,floor,b,kind} of floorObjs){
+    const top=B[b].top;
+    let vis= sel==='all'?floor>=1 : sel===0?floor===0 : floor>=1&&floor<=sel;
+    if(kind==='roof') vis= sel==='all'||(sel!==0&&top<=sel);
+    obj.visible=vis;
+    if(kind==='room'){
+      const r=obj.userData.room; let fade=0;
+      if(sel!=='all'&&sel!==0&&floor<sel) fade=.6;
+      if(catSel&&r.cat!==catSel) fade=Math.max(fade,.78);
+      if(selB&&r.b!==selB.id&&!selected) fade=Math.max(fade,.35);
+      obj.material.color.copy(obj.userData.base.clone().lerp(gray,fade));
+    }
+  }
+  deco.forEach(d=>d.visible=sel!==0);
+  LANDMARKS.forEach(l=>l.o&&(l.o.visible=sel==='all'||sel===1));
+  DATA.buildings.forEach(b=>{
+    const has=sel==='all'||b.floors.includes(sel), lvl=sel==='all'?b.top:sel===0?0:Math.min(sel,b.top);
+    b.label.visible=sel===0?b.floors.includes(0):true;
+    b.label.position.y=yBase(lvl)+FH+(sel==='all'?3:5);
+    b.label.element.style.opacity=has?1:.55;
+  });
+  DATA.rooms.forEach(r=>{ if(!r.label) return;
+    const onFloor=sel!=='all'&&r.floors.includes(sel), catOk=!catSel||r.cat===catSel;
+    r.label.visible=(onFloor&&catOk)||(sel==='all'&&catSel&&r.cat===catSel&&r.cat!=='toilet')||r===selected; });
+  updatePin();
+}
+
+// ---------- legend ----------
+const counts={}; DATA.rooms.forEach(r=>counts[r.cat]=(counts[r.cat]||0)+1);
+const legend=document.getElementById('legend'), legendList=document.getElementById('legendList'), legBtn=document.getElementById('legBtn');
+Object.entries(CAT).filter(([k])=>k!=='hall').forEach(([k,[n,c]])=>{
+  const bt=document.createElement('button'); bt.type='button'; bt.setAttribute('aria-pressed','false');
+  bt.innerHTML=`<span class="sw" style="background:${c}"></span>${n}<span class="n">${counts[k]||0}</span>`;
+  bt.onclick=()=>{ catSel=catSel===k?null:k; legendList.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed','false')); if(catSel) bt.setAttribute('aria-pressed','true'); applyView(); };
+  legendList.append(bt);
+});
+legBtn.onclick=()=>{ legend.hidden=!legend.hidden; legBtn.setAttribute('aria-pressed',String(!legend.hidden)); if(!legend.hidden) card.hidden=true; };
+
+// ---------- pin ----------
+const pin=new THREE.Group();
+{ const pm=new THREE.MeshStandardMaterial({color:0xf2b705,emissive:0x6b4f00,roughness:.4});
+  const cone=new THREE.Mesh(new THREE.ConeGeometry(1.1,2.6,20),pm); cone.rotation.x=Math.PI; cone.position.y=1.3;
+  const ball=new THREE.Mesh(new THREE.SphereGeometry(1.25,20,14),pm); ball.position.y=3.2; pin.add(cone,ball); }
+pin.visible=false; scene.add(pin);
+function updatePin(){
+  if(!selected){ pin.visible=false; return; }
+  const f=selected.floors[0], m=selected.meshes[0];
+  pin.visible=true; pin.userData.y=yBase(f)+FH+(selected.label?3.2:1); pin.position.set(m.position.x,pin.userData.y,m.position.z);
+}
+
+// ---------- detail card ----------
+const card=document.getElementById('card');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function clearSel(){ if(selected){ selected.meshes.forEach(m=>m.material.emissive.setHex(0)); selected.label&&selected.label.element.classList.remove('sel'); } selected=null; }
+function select(r,{fly=false}={}){
+  clearSel(); selB=null;
+  if(!r){ card.hidden=true; applyView(); return; }
+  selected=r; legend.hidden=true; legBtn.setAttribute('aria-pressed','false');
+  const f=r.floors[0];
+  if(r.cat!=='stair'&&floorSel!==f) setFloor(f); else applyView();
+  r.label&&r.label.element.classList.add('sel');
+  const b=r.bld, col=CAT[r.cat][1];
+  const rawDiff=r.raw.replace(/\s+/g,'')!==(r.code+r.name).replace(/\s+/g,'');
+  card.innerHTML=`<div class="cin"><div class="row">${r.code?`<span class="code" style="background:${col}">${esc(r.code)}</span>`:''}<h3>${esc(r.name)}</h3><button class="x" type="button" aria-label="關閉">✕</button></div>
+  <dl><dt>位置</dt><dd>${b.no}號 ${b.name} · ${r.floors.map(fl).join('、')}</dd><dt>類別</dt><dd>${CAT[r.cat][0]}</dd>${rawDiff?`<dt>原表</dt><dd>${esc(r.raw)}</dd>`:''}</dl>
+  ${r.dot?'<p class="note">原配置表在此空間標有 ●</p>':''}
+  <button class="lnk" type="button">看 ${b.name} 全部空間</button></div>`;
+  card.querySelector('.x').onclick=()=>select(null);
+  card.querySelector('.lnk').onclick=()=>selectBuilding(b);
+  card.hidden=false;
+  if(fly){ const m=r.meshes[0]; flyTo(new THREE.Vector3(m.position.x,yBase(f)+FH/2,m.position.z),55); }
+  try{ if(r.code) history.replaceState(null,'','#r'+r.code.replace(/\//g,'-')); }catch(e){}
+  closeDrawer();
+}
+function selectBuilding(b){
+  clearSel(); selB=b; legend.hidden=true; legBtn.setAttribute('aria-pressed','false');
+  if(floorSel!=='all') setFloor('all'); else applyView();
+  const rooms=DATA.rooms.filter(r=>r.b===b.id);
+  const nRooms=rooms.filter(r=>!['toilet','stair','hall'].includes(r.cat)).length;
+  const nStairs=rooms.filter(r=>r.cat==='stair').length;
+  const floorsHtml=b.floors.slice().reverse().map(f=>{
+    const list=rooms.filter(r=>r.floors.includes(f)&&!['stair','hall'].includes(r.cat)).sort((a,c)=>a.a0-c.a0);
+    const main=list.filter(r=>r.cat!=='toilet'), wc=list.filter(r=>r.cat==='toilet').length;
+    if(!main.length&&!wc) return '';
+    return `<div class="fl"><h4><span>${fl(f)}</span>${main.length} 間${wc?` · 廁所 ${wc}`:''}</h4><div class="chips">${main.map(r=>`<button class="chip" type="button" data-id="${r.id}"><i style="background:${CAT[r.cat][1]}"></i>${esc(r.short||r.name)}${r.code?` <span style="color:var(--muted);font:500 11px var(--font-mono)">${esc(r.code)}</span>`:''}</button>`).join('')}</div></div>`;
+  }).join('');
+  card.innerHTML=`<div class="cin"><div class="row"><span class="code" style="background:#1c2632">${b.no}號</span><h3>${b.name}</h3><button class="x" type="button" aria-label="關閉">✕</button></div>
+  <p class="meta">${b.floors.filter(f=>f>0).length} 層樓${b.floors.includes(0)?'＋地下室':''} · ${nRooms} 個空間${nStairs?` · 樓梯／電梯 ${nStairs}`:''} · 長約 ${Math.round(b.len)} 公尺</p>${floorsHtml}</div>`;
+  card.querySelector('.x').onclick=()=>{ selB=null; card.hidden=true; applyView(); };
+  card.querySelectorAll('.chip').forEach(c=>c.onclick=()=>select(DATA.rooms[+c.dataset.id],{fly:true}));
+  card.hidden=false; card.querySelector('.cin').scrollTop=0;
+  flyTo(b.center.clone().setY(yBase(b.top)/2+2),Math.max(60,b.len*1.2));
+  closeDrawer();
+}
+function goLandmark(L){ select(null); selB=null; setFloor('all'); flyTo(L.pos.clone().setY(2),55); closeDrawer(); }
+
+// ---------- camera ----------
+let anim=null;
+function flyTo(target,dist){
+  const a=innerWidth/innerHeight; if(a<1) dist*=Math.min(2.4,.85/a);
+  const dir=camera.position.clone().sub(controls.target).normalize();
+  if(dir.y<.55){ dir.y=.55; dir.normalize(); }
+  target=target.clone();
+  if(innerWidth<=720){ const g=new THREE.Vector3(dir.x,0,dir.z).normalize(); target.add(g.multiplyScalar(dist*.32)); }  // phone: card covers the lower half
+  anim={t0:performance.now(),dur:matchMedia('(prefers-reduced-motion: reduce)').matches?1:850,fromP:camera.position.clone(),toP:target.clone().add(dir.multiplyScalar(dist)),fromT:controls.target.clone(),toT:target};
+}
+function homePos(){
+  const a=innerWidth/innerHeight, tv=Math.tan(THREE.MathUtils.degToRad(19)), th=tv*a;
+  const d=Math.max(90/th,95/tv)*.98;
+  return new THREE.Vector3(d*.1,d*.74,d*.66);
+}
+const HOME_T=new THREE.Vector3(0,0,-6);
+const homeT=()=>HOME_T.clone().setX(innerWidth>720?-22:0);
+function home(){ anim={t0:performance.now(),dur:850,fromP:camera.position.clone(),toP:homePos().add(homeT()),fromT:controls.target.clone(),toT:homeT()}; }
+document.getElementById('homeBtn').onclick=()=>{ select(null); selB=null; card.hidden=true; setFloor('all'); home(); };
+const spinBtn=document.getElementById('spinBtn');
+spinBtn.onclick=()=>{ controls.autoRotate=!controls.autoRotate; spinBtn.setAttribute('aria-pressed',String(controls.autoRotate)); };
+const lblBtn=document.getElementById('lblBtn');
+lblBtn.onclick=()=>{ const on=lblBtn.getAttribute('aria-pressed')!=='true'; lblBtn.setAttribute('aria-pressed',String(on)); labelsEl.classList.toggle('nolabels',!on); };
+document.getElementById('themeBtn').onclick=()=>{ const root=document.documentElement; const dark=getComputedStyle(root).colorScheme.includes('dark'); root.setAttribute('data-theme',dark?'light':'dark'); };
+
+// ---------- Google Map ----------
+const mapSlot=document.getElementById('mapSlot');
+const mapIcon='<svg class="i" viewBox="0 0 24 24"><path d="M12 21s-6-5.6-6-10.5a6 6 0 0 1 12 0C18 15.4 12 21 12 21z"/><circle cx="12" cy="10.5" r="2.2"/></svg><span class="t">Google 地圖</span>';
+if(MAP_MODE==='embed'){
+  const bt=document.createElement('button'); bt.type='button'; bt.className='hb map'; bt.title='開啟 Google 地圖衛星圖'; bt.setAttribute('aria-label','Google 地圖'); bt.innerHTML=mapIcon; mapSlot.replaceWith(bt);
+  const modal=document.getElementById('mapModal');
+  bt.onclick=()=>{ modal.innerHTML=`<div class="modal-box" role="dialog" aria-label="Google 地圖"><div class="modal-h"><b>深坑國小 · Google 地圖衛星圖</b><a href="${GMAP_LINK}" target="_blank" rel="noopener">在 Google 地圖開啟 ↗</a><button type="button" aria-label="關閉">✕</button></div><iframe src="${GMAP_EMBED}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="深坑國小 Google 地圖"></iframe></div>`;
+    modal.hidden=false; modal.querySelector('button').onclick=()=>{ modal.hidden=true; modal.innerHTML=''; }; modal.onclick=e=>{ if(e.target===modal){ modal.hidden=true; modal.innerHTML=''; } }; };
+  addEventListener('keydown',e=>{ if(e.key==='Escape'&&!modal.hidden){ modal.hidden=true; modal.innerHTML=''; } });
+} else {
+  const a=document.createElement('a'); a.className='hb map'; a.href=GMAP_LINK; a.target='_blank'; a.rel='noopener'; a.title='在 Google 地圖開啟深坑國小'; a.setAttribute('aria-label','Google 地圖'); a.innerHTML=mapIcon; mapSlot.replaceWith(a);
+}
+
+// ---------- sidebar: guide list + search ----------
+const side=document.getElementById('side'), list=document.getElementById('list'), q=document.getElementById('q');
+const menuBtn=document.getElementById('menuBtn'), sideX=document.getElementById('sideX');
+menuBtn.onclick=()=>{ const o=!side.classList.contains('open'); side.classList.toggle('open',o); menuBtn.setAttribute('aria-pressed',String(o)); };
+function closeDrawer(){ if(side.classList.contains('open')){ side.classList.remove('open'); menuBtn.setAttribute('aria-pressed','false'); } }
+sideX.onclick=()=>{ const c=!side.classList.contains('collapsed'); side.classList.toggle('collapsed',c); sideX.textContent=c?'+':'−'; sideX.setAttribute('aria-expanded',String(!c)); };
+const norm=s=>String(s).toLowerCase().replace(/\s+/g,'').replace(/[（）()、，,·]/g,'');
+const NUM={'一':1,'二':2,'三':3,'四':4,'五':5,'六':6};
+const index=[];
+DATA.rooms.forEach(r=>{ let alias=''; if(r.short){ const n=NUM[r.short[0]]; alias=`${n}年${r.short[1]}班 ${n}-${r.short[1]} ${r.short}`; }
+  index.push({type:'room',r,label:r.name,code:r.code,where:`${r.bld.name} ${r.floors.map(fl).join('/')}`,hay:norm([r.code,r.name,r.short||'',alias,r.raw,CAT[r.cat][0]].join(' ')),col:CAT[r.cat][1]}); });
+DATA.buildings.forEach(b=>index.push({type:'bld',b,label:`${b.no}號 ${b.name}`,code:'',where:'建築',hay:norm(`${b.no}號${b.name}`),col:'#1c2632'}));
+LANDMARKS.forEach(l=>index.push({type:'lm',l,label:l.name,code:'',where:'校園地點',hay:norm(l.name),col:'#7d8790'}));
+let hits=[], active=0;
+function itemHtml(e,i){
+  const ic=e.type==='room'?`<span class="code" style="background:${e.col}">${esc(e.code||'·')}</span>`:`<span class="ic" style="background:${e.col}">${e.type==='bld'?e.b.no:esc(e.l.icon||'·')}</span>`;
+  return `<button class="item" type="button" data-i="${i}" aria-selected="${i===active}">${ic}<span class="nm">${esc(e.label)}</span><span class="wh">${esc(e.where)}</span></button>`;
+}
+function renderGuide(){
+  const blds=DATA.buildings.slice().sort((a,b)=>a.no-b.no).map(b=>({type:'bld',b,label:`${b.no}號 ${b.name}`,where:`${b.floors.filter(f=>f>0).length}F${b.floors.includes(0)?'＋B1':''}`,col:'#1c2632'}));
+  const lms=LANDMARKS.filter(l=>l.o).map(l=>({type:'lm',l,label:l.name,where:'',col:'#7d8790'}));
+  hits=[...blds,...lms]; active=-1;
+  list.innerHTML=`<div class="sec">建築</div>${blds.map((e,i)=>itemHtml(e,i)).join('')}<div class="sec">校園地點</div>${lms.map((e,i)=>itemHtml(e,i+blds.length)).join('')}`;
+  bindList();
+}
+function bindList(){ list.querySelectorAll('.item').forEach(bt=>bt.onclick=()=>choose(hits[+bt.dataset.i])); }
+function runSearch(){
+  const s=norm(q.value);
+  if(!s){ renderGuide(); return; }
+  hits=index.map(e=>{ let sc=99;
+    if(e.code&&norm(e.code)===s) sc=0; else if(e.code&&norm(e.code).startsWith(s)) sc=1;
+    else if(norm(e.label)===s) sc=1; else if(norm(e.label).startsWith(s)) sc=2; else if(e.hay.includes(s)) sc=3;
+    return [sc,e]; }).filter(([s])=>s<99).sort((a,b)=>a[0]-b[0]||(a[1].code||'zz').localeCompare(b[1].code||'zz')).slice(0,30).map(x=>x[1]);
+  active=0;
+  list.innerHTML=hits.length?`<div class="sec">搜尋結果 · ${hits.length}</div>`+hits.map(itemHtml).join(''):`<div class="empty">找不到「${esc(q.value)}」。試試教室編號（如 223）或名稱（如 英語）。</div>`;
+  bindList();
+}
+function choose(e){
+  if(!e) return;
+  if(e.type==='room') select(e.r,{fly:true});
+  else if(e.type==='bld') selectBuilding(e.b);
+  else goLandmark(e.l);
+}
+q.addEventListener('input',runSearch);
+q.addEventListener('keydown',e=>{
+  const bs=[...list.querySelectorAll('.item')];
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){ e.preventDefault(); if(!bs.length) return; active=((active<0?-1:active)+(e.key==='ArrowDown'?1:-1)+bs.length)%bs.length; bs.forEach((b,i)=>b.setAttribute('aria-selected',String(i===active))); bs[active].scrollIntoView({block:'nearest'}); }
+  else if(e.key==='Enter'){ e.preventDefault(); choose(hits[Math.max(0,active)]); }
+  else if(e.key==='Escape'){ q.value=''; renderGuide(); }
+});
+renderGuide();
+
+// hint bar
+const hint=document.getElementById('hint'), hintTg=document.getElementById('hintTg');
+hintTg.onclick=()=>{ const m=!hint.classList.contains('min'); hint.classList.toggle('min',m); hintTg.style.transform=m?'rotate(180deg)':''; hintTg.setAttribute('aria-expanded',String(!m)); };
+
+// ---------- picking ----------
+const ray=new THREE.Raycaster(), ptr=new THREE.Vector2(), tip=document.getElementById('tip');
+let down=null;
+function pick(e){
+  const rect=renderer.domElement.getBoundingClientRect();
+  ptr.set(((e.clientX-rect.left)/rect.width)*2-1,-((e.clientY-rect.top)/rect.height)*2+1);
+  ray.setFromCamera(ptr,camera);
+  const hit=ray.intersectObjects(pickables.filter(m=>m.visible),false)[0];
+  if(!hit) return null;
+  const u=hit.object.userData;
+  return u.room?{room:u.room}:u.bld?{bld:u.bld}:null;
+}
+renderer.domElement.addEventListener('pointerdown',e=>{ down=[e.clientX,e.clientY]; if(controls.autoRotate){ controls.autoRotate=false; spinBtn.setAttribute('aria-pressed','false'); } });
+renderer.domElement.addEventListener('pointerup',e=>{
+  if(!down) return; const moved=Math.hypot(e.clientX-down[0],e.clientY-down[1]); down=null;
+  if(moved>5) return; const h=pick(e);
+  if(h&&h.room) select(h.room); else if(h&&h.bld) selectBuilding(h.bld); else if(selected||selB){ select(null); }
+});
+let lastMove=0;
+renderer.domElement.addEventListener('pointermove',e=>{
+  if(e.pointerType!=='mouse'||down){ tip.hidden=true; return; }
+  const now=performance.now(); if(now-lastMove<40) return; lastMove=now;
+  const h=pick(e);
+  renderer.domElement.style.cursor=h?'pointer':'';
+  if(h){ tip.textContent=h.room?`${h.room.code?h.room.code+' · ':''}${h.room.name}　${h.room.bld.name} ${h.room.floors.map(fl).join('/')}`:`${h.bld.no}號 ${h.bld.name}（點擊查看）`;
+    tip.style.left=e.clientX+'px'; tip.style.top=e.clientY+'px'; tip.hidden=false; } else tip.hidden=true;
+});
+renderer.domElement.addEventListener('pointerleave',()=>tip.hidden=true);
+
+// ---------- loop ----------
+function resize(){ const w=innerWidth,h=innerHeight; renderer.setSize(w,h); labelR.setSize(w,h); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+
+addEventListener('resize',resize); resize();
+const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+const clock=new THREE.Clock();
+function tick(){
+  const now=performance.now();
+  if(anim){ const t=Math.min(1,(now-anim.t0)/anim.dur), k=ease(t); camera.position.lerpVectors(anim.fromP,anim.toP,k); controls.target.lerpVectors(anim.fromT,anim.toT,k); if(t>=1) anim=null; }
+  controls.update();
+  const far=camera.position.distanceTo(controls.target)>(innerWidth<720?170:230);
+  if(far!==labelsEl.classList.contains('compact')) labelsEl.classList.toggle('compact',far);
+  if(pin.visible){ const t=clock.getElapsedTime(); pin.position.y=pin.userData.y+Math.sin(t*3)*.4; pin.rotation.y=t*1.2;
+    if(selected) selected.meshes.forEach(m=>m.material.emissive.setRGB(.35*(.5+.5*Math.sin(t*4)),.25*(.5+.5*Math.sin(t*4)),0)); }
+  renderer.render(scene,camera); labelR.render(scene,camera);
+  requestAnimationFrame(tick);
+}
+camera.position.copy(homePos().add(homeT())); controls.target.copy(homeT());
+setFloor('all');
+const h=location.hash.match(/^#r([0-9A-Z-]+)$/);
+if(h){ const r=DATA.rooms.find(x=>x.code.replace(/\//g,'-')===h[1]); if(r) setTimeout(()=>select(r,{fly:true}),300); }
+tick();
+window.__campus={DATA,setFloor,select,selectBuilding,B,camera,controls};
+</script>
+
+</body>
+</html>
